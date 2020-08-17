@@ -12,10 +12,10 @@ import { proc_exit } from "bindings/wasi_unstable";
 export function abort_proc_exit(message: string | null, fileName: string | null, lineNumber: u32, columnNumber: u32): void {
   let logMessage = "";
   if (message != null) {
-    logMessage += message.toString();
+    logMessage += message!;
   }
   if (fileName != null) {
-    logMessage += " at: " + fileName.toString() + "(" + lineNumber.toString() + ":" + columnNumber.toString() + ")";
+    logMessage += " at: " + fileName! + "(" + lineNumber.toString() + ":" + columnNumber.toString() + ")";
   }
   log(LogLevelValues.critical, logMessage);
   proc_exit(255);
@@ -74,8 +74,8 @@ let globalU64Ref = new Reference<u64>();
 let globalUsizeRef = new Reference<usize>();
 
 export class HeaderPair {
-  key: ArrayBuffer;
-  value: ArrayBuffer;
+  key: ArrayBuffer = new ArrayBuffer(0);
+  value: ArrayBuffer = new ArrayBuffer(0);
 
   toString() : string {
     return this.key.toString() + ":" + this.value.toString();
@@ -581,7 +581,6 @@ class Metric {
 }
 
 export class Gauge extends Metric {
-  metric_id: u32;
 
   constructor(name: string) {
     super(MetricTypeValues.Gauge, name);
@@ -596,7 +595,6 @@ export class Gauge extends Metric {
 }
 
 export class Histogram extends Metric {
-  metric_id: u32;
 
   constructor(name: string) {
     super(MetricTypeValues.Histogram, name);
@@ -611,10 +609,13 @@ export class Histogram extends Metric {
 }
 
 export class Counter extends Metric {
-  metric_id: u32;
 
   constructor(name: string) {
     super(MetricTypeValues.Counter, name);
+  }
+
+  inc(offset: u32 = 1): WasmResultValues {
+    return this.increment(offset);
   }
 
   increment(offset: u32): WasmResultValues {
@@ -724,9 +725,9 @@ export abstract class BaseContext {
  * Wrapper around http callbacks. When AS script supports closures, we can refactor \ remove this.
  */
 export class HttpCallback {
-  origin_context: BaseContext;
-  cb: (origin_context: BaseContext, headers: u32,  body_size: usize, trailers: u32) => void;
-  constructor(origin_context: BaseContext, cb: (origin_context: BaseContext, headers: u32,  body_size: usize, trailers: u32) => void) {
+  origin_context: Context;
+  cb: (origin_context: Context, headers: u32,  body_size: usize, trailers: u32) => void;
+  constructor(origin_context: Context, cb: (origin_context: Context, headers: u32,  body_size: usize, trailers: u32) => void) {
     this.origin_context = origin_context;
     this.cb = cb;
   }
@@ -768,6 +769,7 @@ export class RootContext extends BaseContext {
     this.onTick_ = (thiz: RootContext) => { thiz.onTick(); };
     this.onQueueReady_ = (thiz: RootContext, token: u32) => { thiz.onQueueReady(token); };
     this.onDone_ = (thiz: BaseContext) => { return (thiz as RootContext).onDone(); };
+    this.done_ = (thiz: RootContext) => { thiz.done(); };
     this.onHttpCallResponse_ = (thiz: RootContext, token: u32, headers: u32, body_size: u32, trailers: u32) => { thiz.onHttpCallResponse(token, headers, body_size, trailers); };
   }
 
@@ -852,7 +854,7 @@ export class RootContext extends BaseContext {
    * @param timeout_milliseconds Timeout for the request, in milliseconds.
    * @param cb Callback to be invoked when the request is complete.
    */
-  httpCall(cluster: string, headers: Headers, body: ArrayBuffer, trailers: Headers, timeout_milliseconds: u32, origin_context: BaseContext, cb: (origin_context:Context, headers: u32, body_size: usize, trailers: u32) => void): WasmResultValues {
+  httpCall(cluster: string, headers: Headers, body: ArrayBuffer, trailers: Headers, timeout_milliseconds: u32, origin_context: Context, cb: (origin_context:Context, headers: u32, body_size: usize, trailers: u32) => void): WasmResultValues {
     log(LogLevelValues.debug, "context id: " + this.context_id.toString() + ": httpCall(cluster: " + cluster + ", headers:" + headers.toString() + ", body:" + body.toString() + ", trailers:" + trailers.toString() + ")");
     let buffer = String.UTF8.encode(cluster);
     let header_pairs = serializeHeaders(headers);
